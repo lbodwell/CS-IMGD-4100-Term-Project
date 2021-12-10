@@ -8,6 +8,7 @@ public class PlayerController : MonoBehaviour {
     public float movementSpeed = 2f;
     public float turnSmoothingTime = 0.1f;
     public bool isJumping;
+    public int currentFloor;
 
     private const float Gravity = 0.08f;
     private float _turnSmoothingVel;
