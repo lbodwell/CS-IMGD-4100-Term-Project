@@ -50,7 +50,10 @@ public class EnemyController : MonoBehaviour {
     private bool _isReceivingManipulatorComms;
     private bool _hasResponded;
     private bool _wasBoostSuccessful;
+    private bool _isPushing;
     private float _allyWillingnessToBoost;
+    private float _turnTimer;
+    private float _pushTimer;
 
     private void Start() {
         _rand = new Random();
@@ -95,6 +98,7 @@ public class EnemyController : MonoBehaviour {
                                 
                                 if (Math.Abs(allyDirection - holeDirection) < 5) {
                                     canPush = true;
+                                    _target = ally;
                                 }
                             }
                         }
@@ -111,6 +115,7 @@ public class EnemyController : MonoBehaviour {
                         state = EnemyState.Turning;
                     }
                 } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor) {
+                    _target = _player;
                     state = EnemyState.Chasing;
                 } else if (_isReceivingComms) {
                     state = EnemyState.CommsWithAllyOtherInitiated;
@@ -123,20 +128,125 @@ public class EnemyController : MonoBehaviour {
             }
             
             case EnemyState.Turning: {
-                if (_rand.Next(0, 1) == 0) {
-                    transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 90, transform.rotation.z));
-                    if (isWallInFront()) {
-                        transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
+                if (Time.time > _turnTimer) {
+                    if (_rand.Next(0, 1) == 0) {
+                        transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 90, transform.rotation.z));
+                        if (isWallInFront()) {
+                            transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
+                        }
+                    } else {
+                        transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y - 90, transform.rotation.z));
+                        if (isWallInFront()) {
+                            transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
+                        }
                     }
-                } else {
-                    transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y - 90, transform.rotation.z));
-                    if (isWallInFront()) {
-                        transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
-                    }
+                    _turnTimer = Time.time + 1;
                 }
                 
                 state = EnemyState.Roaming;
                 
+                break;
+            }
+
+            case EnemyState.BeingPushed: {
+                //set navmesh destination to nearest hole
+                if(transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
+                    state = EnemyState.Roaming;
+                    currentFloor = currentFloor - 1;
+                }
+
+                break;
+            }
+
+            case EnemyState.AbleToPush: {
+                if(_rand.NextDouble() < 0.5 && Time.time > _pushTimer) {
+                    state = EnemyState.Pushing;
+                    _pushTimer = Time.time + 3;
+                }
+                else {
+                    state = EnemyState.Roaming;
+                    _pushTimer = Time.time + 1;
+                }
+
+                break;
+            }
+
+            case EnemyState.Pushing: {
+                if (!_isPushing) {
+                    //set navmesh destination to target
+                    _isPushing = true;
+                    //send event to target 
+                }
+                //use navmesh to move towards destination
+                //if our position equals navmesh destination
+                _isPushing = false;
+                state = EnemyState.Roaming;
+
+                break;
+            }
+
+            case EnemyState.Chasing: {
+                //set navmesh destination to player
+                //move towards player using navmesh
+                if(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor + 1) {
+                    state = EnemyState.SearchingAlly;
+                }
+                else if(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor - 1) {
+                    state = EnemyState.JumpingDown;   
+                    //set navmesh destination to nearest hole
+                }
+                else if(!(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor)) {
+                    state = EnemyState.Roaming;
+                }
+                else if(transform.position == _target.transform.position) {
+                    //game over
+                }
+                break;
+            }
+
+            case EnemyState.JumpingDown: {
+                //use navmesh to move towards hole
+                if(transform.position.x == nearestHole.transform.position.x && 
+                transform.position.z == nearestHole.transform.position.z && 
+                transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
+                    state = EnemyState.Roaming;
+                }
+                break;
+            }
+
+            case EnemyState.SearchingAlly: {
+                break;
+            }
+
+            case EnemyState.ChasingAlly: {
+                break;
+            }
+
+            case EnemyState.CommsWithAllySelfInitiated: {
+                break;
+            }
+
+            case EnemyState.ReturnToHoleBoosting: {
+                break;
+            }
+
+            case EnemyState.Boosting: {
+                break;
+            }
+
+            case EnemyState.ReturnToHoleBeingBoosted: {
+                break;
+            }
+
+            case EnemyState.BeingBoosted: {
+                break;
+            }
+
+            case EnemyState.CommsWithAllyOtherInitiated: {
+                break;
+            }
+
+            case EnemyState.CommsWithAllyManipulatorInitiated: {
                 break;
             }
             
