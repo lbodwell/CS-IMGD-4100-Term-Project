@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 705507994}
-  m_IndirectSpecularColor: {r: 0.4482453, g: 0.49827206, b: 0.5755818, a: 1}
+  m_IndirectSpecularColor: {r: 0.4482448, g: 0.4982714, b: 0.575581, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -156,7 +156,7 @@ MonoBehaviour:
   controller: {fileID: 111470053}
   cam: {fileID: 963194228}
   velocity: {x: 0, y: 0, z: 0}
-  movementSpeed: 2
+  movementSpeed: 8
   turnSmoothingTime: 0.1
   isJumping: 0
 --- !u!4 &111470052
