@@ -2,7 +2,6 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour {
     public CharacterController controller;
-    public Animator animator;
     public Transform cam;
 
     public Vector3 velocity = new Vector3(0f, 0f, 0f);
@@ -34,8 +33,7 @@ public class PlayerController : MonoBehaviour {
 
         if (inputDirection.magnitude < 0.1f) {
             finalVel = new Vector3(0f, velocity.y, 0f);
-        }
-        else {
+        } else {
             var targetAngle = Mathf.Atan2(inputDirection.x, inputDirection.z) * Mathf.Rad2Deg + cam.eulerAngles.y;
             var smoothedAngle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref _turnSmoothingVel,
                 turnSmoothingTime);

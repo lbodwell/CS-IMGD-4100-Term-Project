@@ -154,10 +154,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   controller: {fileID: 111470053}
-  animator: {fileID: 0}
   cam: {fileID: 963194228}
   velocity: {x: 0, y: 0, z: 0}
-  movementSpeed: 24
+  movementSpeed: 2
   turnSmoothingTime: 0.1
   isJumping: 0
 --- !u!4 &111470052
