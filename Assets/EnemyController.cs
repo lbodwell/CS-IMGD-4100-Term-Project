@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using Random = System.Random;
 
@@ -36,13 +37,16 @@ public class EnemyController : MonoBehaviour {
     public float playerDetectionRange;
     public float pushRange;
     public float holeDetectionRange;
+    public float communicationRange;
     public int currentFloor;
     public bool isNearHole;
     public int intersectionRadius;
-    public GameObject nearestHole;
+    public GameObject nearestDownwardHole;
+    public GameObject nearestUpwardHole;
 
     private GameObject _player;
     private GameObject _target;
+    private List<GameObject> _recentRejections;
     private Random _rand;
     private bool _isAtIntersection;
     private bool _isBeingPushed;
@@ -66,15 +70,17 @@ public class EnemyController : MonoBehaviour {
 
         var shortestHoleDist = holeDetectionRange + 1;
         isNearHole = false;
-        nearestHole = null;
+        nearestDownwardHole = null;
         foreach (var hole in HoleManager.Instance.holes) {
             var holeCollider = hole.GetComponent<HoleCollider>();
             var holePos = holeCollider.transform.position;
             var holeDist = Vector3.Distance(holePos, transform.position);
-            if (holeDist < shortestHoleDist && holeDist < holeDetectionRange) {
+            if (holeDist < shortestHoleDist && hole.GetComponent<HoleCollider>().floorNumber == currentFloor) {
                 shortestHoleDist = holeDist;
-                isNearHole = true;
-                nearestHole = hole;
+                if (holeDist < holeDetectionRange) {
+                    isNearHole = true;
+                }
+                nearestDownwardHole = hole;
             }
         }
 
@@ -91,7 +97,7 @@ public class EnemyController : MonoBehaviour {
                         // Create re-usable interfaces for controllers for other AI implementations
                         var allyController = ally.GetComponent<EnemyController>();
                         if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
-                            var hole = allyController.nearestHole;
+                            var hole = allyController.nearestDownwardHole;
                             if (allyController.isNearHole && hole != null) {
                                 var allyDirection = Vector3.Angle(allyPos, transform.position);
                                 var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
@@ -99,6 +105,7 @@ public class EnemyController : MonoBehaviour {
                                 if (Math.Abs(allyDirection - holeDirection) < 5) {
                                     canPush = true;
                                     _target = ally;
+                                    break;
                                 }
                             }
                         }
@@ -150,6 +157,7 @@ public class EnemyController : MonoBehaviour {
 
             case EnemyState.BeingPushed: {
                 //set navmesh destination to nearest hole
+                // float comparison
                 if(transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
                     state = EnemyState.Roaming;
                     currentFloor = currentFloor - 1;
@@ -188,26 +196,38 @@ public class EnemyController : MonoBehaviour {
             case EnemyState.Chasing: {
                 //set navmesh destination to player
                 //move towards player using navmesh
-                if(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor + 1) {
+
+                if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor + 1) {
+                    var shortestUpHoleDist = float.MaxValue;
+                    nearestUpwardHole = null;
+                    foreach (var hole in HoleManager.Instance.holes) {
+                        var holeCollider = hole.GetComponent<HoleCollider>();
+                        var holePos = holeCollider.transform.position;
+                        var holeDist = Vector3.Distance(holePos, transform.position);
+                        if (holeDist < shortestUpHoleDist && hole.GetComponent<HoleCollider>().floorNumber == currentFloor + 1) {
+                            shortestUpHoleDist = holeDist;
+                            nearestUpwardHole = hole;
+                        }
+                    }
+                    
                     state = EnemyState.SearchingAlly;
-                }
-                else if(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor - 1) {
+                } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor - 1) {
                     state = EnemyState.JumpingDown;   
                     //set navmesh destination to nearest hole
-                }
-                else if(!(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor)) {
+                } else if (!(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor)) {
                     state = EnemyState.Roaming;
-                }
-                else if(transform.position == _target.transform.position) {
+                } else if (transform.position == _target.transform.position) {
                     //game over
                 }
+                
                 break;
             }
 
             case EnemyState.JumpingDown: {
                 //use navmesh to move towards hole
-                if(transform.position.x == nearestHole.transform.position.x && 
-                transform.position.z == nearestHole.transform.position.z && 
+                // float comparison
+                if (transform.position.x == nearestDownwardHole.transform.position.x && 
+                transform.position.z == nearestDownwardHole.transform.position.z && 
                 transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
                     state = EnemyState.Roaming;
                 }
@@ -215,43 +235,172 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.SearchingAlly: {
+                var shortestDist = float.MaxValue;
+                GameObject closestAlly = null;
+                
+                foreach (var ally in EnemyManager.Instance.enemies) {
+                    if (!_recentRejections.Contains(ally)) {
+                        var allyDist = Vector3.Distance(transform.position, ally.transform.position);
+                        if (allyDist < shortestDist && ally.GetComponent<EnemyController>().currentFloor == currentFloor) {
+                            shortestDist = allyDist;
+                            closestAlly = ally;
+                        }
+                    }
+                }
+
+                if (closestAlly != null) {
+                    _target = closestAlly;
+                    state = EnemyState.Chasing;
+                } else {
+                    nearestUpwardHole = null;
+                    state = EnemyState.Roaming;
+                }
+                
                 break;
             }
 
             case EnemyState.ChasingAlly: {
+                if (_isBeingPushed) {
+                    state = EnemyState.BeingPushed;
+                } else {
+                    // Set nav mesh destination to target position
+                    
+                    var allyDist = Vector3.Distance(_target.transform.position, transform.position);
+                    if (allyDist < communicationRange) {
+                        state = EnemyState.CommsWithAllySelfInitiated;
+                    }
+                }
+
                 break;
             }
 
             case EnemyState.CommsWithAllySelfInitiated: {
+                if (boostStatus == BoostStatus.Undefined) {
+                    // 0.3-0.5
+                    var willingness = _rand.NextDouble() * 0.2 + 0.3;
+                    // Send event with reference to ourself, reference to target, and willingness value
+                    // OnCommsInitiated(this, _target, willingness);
+                    boostStatus = BoostStatus.Waiting;
+                } else if (allyBoostStatus == BoostStatus.Boosting) {
+                    boostStatus = BoostStatus.BeingBoosted;
+                    _recentRejections.Clear();
+                    state = EnemyState.ReturnToHoleBeingBoosted;
+                } else if (allyBoostStatus == BoostStatus.BeingBoosted) {
+                    boostStatus = BoostStatus.Boosting;
+                    _recentRejections.Clear();
+                    state = EnemyState.ReturnToHoleBoosting;
+                } else if (allyBoostStatus == BoostStatus.Rejection) {
+                    boostStatus = BoostStatus.Rejection;
+                    _recentRejections.Add(_target);
+                    state = EnemyState.ReturnToHoleBeingBoosted;
+                }
+                
                 break;
             }
 
             case EnemyState.ReturnToHoleBoosting: {
+                // Set navmesh destination to nearest upward hole
+                // float comparison
+                if (transform.position.x == nearestUpwardHole.transform.position.x && 
+                    transform.position.z == nearestUpwardHole.transform.position.z) {
+                    state = EnemyState.Boosting;
+                }
+                
                 break;
             }
 
             case EnemyState.Boosting: {
+                if (_wasBoostSuccessful) {
+                    _wasBoostSuccessful = false;
+                    boostStatus = BoostStatus.Undefined;
+                    allyBoostStatus = BoostStatus.Undefined;
+                    state = EnemyState.Roaming;
+                }
+                
                 break;
             }
 
             case EnemyState.ReturnToHoleBeingBoosted: {
+                // Set navmesh destination to nearest upward hole
+                // float comparison
+                if (transform.position.x == nearestUpwardHole.transform.position.x && 
+                    transform.position.z == nearestUpwardHole.transform.position.z) {
+                    state = EnemyState.BeingBoosted;
+                }
+                
                 break;
             }
 
             case EnemyState.BeingBoosted: {
+                // if using physical holes, move to side so it won't fall back down immediately
+                transform.position = new Vector3(transform.position.x, HoleManager.Instance.floorMapping[currentFloor + 1], transform.position.z);
+                currentFloor++;
+                // send event to ally on boost successs
+                //OnBoostSuccess(this, _target);
+                state = EnemyState.Roaming;
+                
                 break;
             }
 
             case EnemyState.CommsWithAllyOtherInitiated: {
+                // 0.3-0.5
+                var willingness = _rand.NextDouble() * 0.2 + 0.3;
+                if (willingness > _rand.NextDouble()) {
+                    boostStatus = BoostStatus.Boosting;
+                } else if (_allyWillingnessToBoost > _rand.NextDouble()) {
+                    boostStatus = BoostStatus.BeingBoosted;
+                } else {
+                    boostStatus = BoostStatus.Rejection;
+                }
+                
+                // send event with our boost status
+                //OnCommsResponse(this, _target, boostStatus);
+
+                switch (boostStatus) {
+                    case BoostStatus.Boosting: {
+                        state = EnemyState.ReturnToHoleBoosting;
+                        
+                        break;
+                    }
+                    
+                    case BoostStatus.BeingBoosted: {
+                        state = EnemyState.ReturnToHoleBeingBoosted;
+                        
+                        break;
+                    }
+                    
+                    default: {
+                        boostStatus = BoostStatus.Undefined;
+                        state = EnemyState.Roaming;
+                        
+                        break;
+                    }
+                }
+                
                 break;
             }
 
             case EnemyState.CommsWithAllyManipulatorInitiated: {
+                // 0.3-0.5
+                var willingness = _rand.NextDouble() * 0.2 + 0.3;
+                boostStatus = willingness > _rand.NextDouble() ? BoostStatus.Boosting : BoostStatus.Rejection;
+                
+                // send event with our boost status
+                //OnCommsResponse(this, _target, boostStatus);
+
+                if (boostStatus == BoostStatus.Boosting) {
+                    state = EnemyState.ReturnToHoleBoosting;
+                } else {
+                    boostStatus = BoostStatus.Undefined;
+                    state = EnemyState.Roaming;
+                }
+                
                 break;
             }
             
             default: {
                 state = EnemyState.Roaming;
+                
                 break;
             }
         }
