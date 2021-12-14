@@ -46,13 +46,13 @@ public class Enemy1Controller : MonoBehaviour {
     public EnemyState state;
     public BoostStatus boostStatus;
     public BoostStatus allyBoostStatus;
-    public float playerDetectionRange;
-    public float pushRange;
-    public float holeDetectionRange;
-    public float communicationRange;
-    public int currentFloor;
+    public float playerDetectionRange = 50;
+    public float pushRange = 25;
+    public float holeDetectionRange = 100;
+    public float communicationRange = 25;
+    public float intersectionRadius = 25;
+    public int currentFloor = 5;
     public bool isNearHole;
-    public int intersectionRadius;
     public GameObject nearestDownwardHole;
     public GameObject nearestUpwardHole;
 
@@ -67,6 +67,7 @@ public class Enemy1Controller : MonoBehaviour {
     private bool _hasResponded;
     private bool _wasBoostSuccessful;
     private bool _isPushing;
+    private bool _canPush;
     private double _allyWillingnessToBoost;
     private float _turnTimer;
     private float _pushTimer;
@@ -115,42 +116,40 @@ public class Enemy1Controller : MonoBehaviour {
             case EnemyState.Roaming: {
                 // TODO: tune this
                 agent.SetDestination(transform.position + transform.forward * 5);
-                
-                var canPush = false;
-                foreach (var ally in EnemyManager.Instance.enemies) {
-                    if (ally.GetInstanceID() != GetInstanceID()) {
-                        var allyPos = ally.transform.position;
-                        var allyDist = Vector3.Distance(allyPos, transform.position);
-                        // Create re-usable interfaces for controllers for other AI implementations
-                        var allyController = ally.GetComponent<Enemy1Controller>();
-                        if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
-                            var hole = allyController.nearestDownwardHole;
-                            if (allyController.isNearHole && hole != null) {
-                                var allyDirection = Vector3.Angle(allyPos, transform.position);
-                                var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
-                                
-                                if (Math.Abs(allyDirection - holeDirection) < 5) {
-                                    // Ally is within certain range of us
-                                    // Ally is within certain range of hole
-                                    // Angle between ally, hole, and us is a straight line
-                                    canPush = true;
-                                    _target = ally;
-                                    break;
+
+                if (!_canPush) {
+                    foreach (var ally in EnemyManager.Instance.enemies) {
+                        if (ally.GetInstanceID() != GetInstanceID()) {
+                            var allyPos = ally.transform.position;
+                            var allyDist = Vector3.Distance(allyPos, transform.position);
+                            // Create re-usable interfaces for controllers for other AI implementations
+                            var allyController = ally.GetComponent<Enemy1Controller>();
+                            if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
+                                var hole = allyController.nearestDownwardHole;
+                                if (allyController.isNearHole && hole != null) {
+                                    var allyDirection = Vector3.Angle(allyPos, transform.position);
+                                    var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
+
+                                    if (Math.Abs(allyDirection - holeDirection) < 5) {
+                                        // Ally is within certain range of us
+                                        // Ally is within certain range of hole
+                                        // Angle between ally, hole, and us is a straight line
+                                        _canPush = true;
+                                        _target = ally;
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                
-                
+
                 if (_isBeingPushed) {
                     state = EnemyState.BeingPushed;
-                } else if (_isAtIntersection) {
-                    if (_rand.NextDouble() > 0.5 || isWallInFront()) {
-                        state = EnemyState.Turning;
-                    }
+                } else if (_isAtIntersection && (_rand.NextDouble() > 0.5 || IsWallInFront())) {
+                    state = EnemyState.Turning;
                 } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor) {
-                    _target = _player;
+                     _target = _player;
                     state = EnemyState.Chasing;
                 } else if (_isReceivingComms) {
                     _isReceivingComms = false;
@@ -158,22 +157,25 @@ public class Enemy1Controller : MonoBehaviour {
                 } else if (_isReceivingManipulatorComms) {
                     _isReceivingManipulatorComms = false;
                     state = EnemyState.CommsWithAllyManipulatorInitiated;
-                } else if (canPush) {
+                } else if (_canPush) {
                     state = EnemyState.AbleToPush;
+                } else {
+                    print("dist: " + playerDist + ", range: " + playerDetectionRange);
                 }
+
                 break;
-            }
+        }
             
             case EnemyState.Turning: {
                 if (Time.time > _turnTimer) {
                     if (_rand.Next(0, 1) == 0) {
                         transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 90, transform.rotation.z));
-                        if (isWallInFront()) {
+                        if (IsWallInFront()) {
                             transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
                         }
                     } else {
                         transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y - 90, transform.rotation.z));
-                        if (isWallInFront()) {
+                        if (IsWallInFront()) {
                             transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
                         }
                     }
@@ -454,20 +456,32 @@ public class Enemy1Controller : MonoBehaviour {
         }
     }
 
-    private bool isWallInFront() {
-        // Use raycast to check if wall is in front of us
-        // Figure out how layer masks work
-        // if (Physics.Raycast(transform.position, Vector3.forward, out var hit)) {
-        //     if (hit.transform.gameObject.layer == "Wall") {
-        //     }
-        // }
+    private bool IsWallInFront() {
+        print("checking for wall");
+        const int layerMask = 1 << 6;
 
+        if (Physics.Raycast(transform.position, transform.forward, out var hit, 20, layerMask)) {
+            Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.yellow);
+            Debug.Log("Wall detected");
+            return true;
+        }
+
+        Debug.DrawRay(transform.position, transform.forward * 20, Color.white);
+        Debug.Log("No wall detected");
+        
         return false;
     }
 
     private void OnCollisionEnter(Collision other) {
-        throw new NotImplementedException();
-        // TODO: set isAtIntersection to true if other is of type intersection trigger volume
+        if (other.gameObject.CompareTag("Intersection")) {
+            _isAtIntersection = true;
+        }
+    }
+
+    private void OnCollisionExit(Collision other) {
+        if (other.gameObject.CompareTag("Intersection")) {
+            _isAtIntersection = false;
+        }
     }
 
     private void OnCommsResponse(GameObject sender, GameObject recipient, BoostStatus allyStatus) {
