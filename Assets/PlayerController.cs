@@ -1,24 +1,42 @@
+using System;
 using UnityEngine;
 
 public class PlayerController : MonoBehaviour {
     public CharacterController controller;
     public Transform cam;
-
+    public GameObject nearestDownwardHole;
+    public GameObject nearestUpwardHole;
     public Vector3 velocity = new Vector3(0f, 0f, 0f);
     public float movementSpeed = 2f;
     public float turnSmoothingTime = 0.1f;
-    public bool isJumping;
     public int currentFloor = 5;
+    public bool isJumping;
 
     private const float Gravity = 0.08f;
     private float _turnSmoothingVel;
 
     private void Update() {
+        var shortestHoleDist = float.MaxValue;
+        nearestDownwardHole = null;
+        nearestUpwardHole = null;
+        foreach (var hole in HoleManager.Instance.holes) {
+            var holeCollider = hole.GetComponent<HoleCollider>();
+            var holePos = holeCollider.transform.position;
+            var holeDist = Vector3.Distance(holePos, transform.position);
+            if (holeDist < shortestHoleDist && hole.GetComponent<HoleCollider>().floorNumber == currentFloor) {
+                shortestHoleDist = holeDist;
+                nearestDownwardHole = hole;
+            }
+        }
+        
         var horizInput = Input.GetAxisRaw("Horizontal");
         var vertInput = Input.GetAxisRaw("Vertical");
         var inputDirection = new Vector3(horizInput, 0f, vertInput).normalized;
 
         if (Input.GetKeyDown(KeyCode.Space) && controller.isGrounded) {
+            if (Vector3.Distance(transform.position, nearestUpwardHole.transform.position) < 10) {
+                
+            }
             velocity.y = 12f;
             isJumping = true;
         }

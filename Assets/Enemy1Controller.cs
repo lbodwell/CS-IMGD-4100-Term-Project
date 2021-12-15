@@ -46,6 +46,8 @@ public class Enemy1Controller : MonoBehaviour {
     public EnemyState state;
     public BoostStatus boostStatus;
     public BoostStatus allyBoostStatus;
+    public GameObject nearestDownwardHole;
+    public GameObject nearestUpwardHole;
     public float playerDetectionRange = 50;
     public float pushRange = 25;
     public float holeDetectionRange = 100;
@@ -53,8 +55,6 @@ public class Enemy1Controller : MonoBehaviour {
     public float intersectionRadius = 25;
     public int currentFloor = 5;
     public bool isNearHole;
-    public GameObject nearestDownwardHole;
-    public GameObject nearestUpwardHole;
 
     private GameObject _player;
     private GameObject _target;
@@ -122,7 +122,6 @@ public class Enemy1Controller : MonoBehaviour {
                         if (ally.GetInstanceID() != GetInstanceID()) {
                             var allyPos = ally.transform.position;
                             var allyDist = Vector3.Distance(allyPos, transform.position);
-                            // Create re-usable interfaces for controllers for other AI implementations
                             var allyController = ally.GetComponent<Enemy1Controller>();
                             if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
                                 var hole = allyController.nearestDownwardHole;
@@ -131,9 +130,6 @@ public class Enemy1Controller : MonoBehaviour {
                                     var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
 
                                     if (Math.Abs(allyDirection - holeDirection) < 5) {
-                                        // Ally is within certain range of us
-                                        // Ally is within certain range of hole
-                                        // Angle between ally, hole, and us is a straight line
                                         _canPush = true;
                                         _target = ally;
                                         break;
@@ -146,7 +142,7 @@ public class Enemy1Controller : MonoBehaviour {
 
                 if (_isBeingPushed) {
                     state = EnemyState.BeingPushed;
-                } else if (_isAtIntersection && (_rand.NextDouble() > 0.5 || IsWallInFront())) {
+                } else if ((_isAtIntersection && _rand.NextDouble() > 0.5) || IsWallInFront()) {
                     state = EnemyState.Turning;
                 } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor) {
                      _target = _player;
@@ -160,6 +156,7 @@ public class Enemy1Controller : MonoBehaviour {
                 } else if (_canPush) {
                     state = EnemyState.AbleToPush;
                 } else {
+                    // For debugging
                     print("dist: " + playerDist + ", range: " + playerDetectionRange);
                 }
 
@@ -190,14 +187,17 @@ public class Enemy1Controller : MonoBehaviour {
             case EnemyState.BeingPushed: {
                 if (nearestDownwardHole != null) {
                     agent.SetDestination(nearestDownwardHole.transform.position);
+                    
+                    // fix in enemy 2
+                    if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
+                        Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
+                        currentFloor == nearestDownwardHole.GetComponent<HoleCollider>().floorNumber) {
+                        transform.position = new Vector3(transform.position.x, transform.position.y - 15, transform.position.z);
+                        currentFloor--;
+                        state = EnemyState.Roaming;
+                    }
                 } else {
                     state = EnemyState.Roaming;
-                }
-
-                // float comparison
-                if (transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
-                    state = EnemyState.Roaming;
-                    currentFloor--;
                 }
 
                 break;
@@ -266,16 +266,19 @@ public class Enemy1Controller : MonoBehaviour {
             case EnemyState.JumpingDown: {
                 if (nearestDownwardHole != null) {
                     agent.SetDestination(nearestDownwardHole.transform.position);
+                    
+                    // fix this in enemy 2
+                    if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
+                        Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
+                        currentFloor == nearestDownwardHole.GetComponent<HoleCollider>().floorNumber) {
+                        transform.position = new Vector3(transform.position.x, transform.position.y - 15, transform.position.z);
+                        currentFloor--;
+                        state = EnemyState.Roaming;
+                    }
                 } else {
                     state = EnemyState.Roaming;
                 }
-                
-                // float comparison
-                if (transform.position.x == nearestDownwardHole.transform.position.x && 
-                transform.position.z == nearestDownwardHole.transform.position.z && 
-                transform.position.y == HoleManager.Instance.floorMapping[currentFloor - 1]) {
-                    state = EnemyState.Roaming;
-                }
+
                 break;
             }
 
@@ -308,9 +311,10 @@ public class Enemy1Controller : MonoBehaviour {
                 if (_isBeingPushed) {
                     state = EnemyState.BeingPushed;
                 } else {
-                    // Set nav mesh destination to target position
+                    var allyPos = _target.transform.position;
+                    agent.SetDestination(allyPos);
                     
-                    var allyDist = Vector3.Distance(_target.transform.position, transform.position);
+                    var allyDist = Vector3.Distance(allyPos, transform.position);
                     if (allyDist < communicationRange) {
                         state = EnemyState.CommsWithAllySelfInitiated;
                     }
@@ -346,9 +350,10 @@ public class Enemy1Controller : MonoBehaviour {
             case EnemyState.ReturnToHoleBoosting: {
                 agent.SetDestination(nearestUpwardHole.transform.position);
                 
-                // float comparison
-                if (transform.position.x == nearestUpwardHole.transform.position.x && 
-                    transform.position.z == nearestUpwardHole.transform.position.z) {
+                // fix in enemy 2
+                if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
+                    Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
+                    nearestUpwardHole.GetComponent<HoleCollider>().floorNumber == currentFloor + 1) {
                     state = EnemyState.Boosting;
                 }
                 
@@ -370,8 +375,9 @@ public class Enemy1Controller : MonoBehaviour {
                 agent.SetDestination(nearestUpwardHole.transform.position);
                 
                 // float comparison
-                if (transform.position.x == nearestUpwardHole.transform.position.x && 
-                    transform.position.z == nearestUpwardHole.transform.position.z) {
+                if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
+                    Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
+                    nearestUpwardHole.GetComponent<HoleCollider>().floorNumber == currentFloor + 1) {
                     state = EnemyState.BeingBoosted;
                 }
                 
@@ -379,8 +385,8 @@ public class Enemy1Controller : MonoBehaviour {
             }
 
             case EnemyState.BeingBoosted: {
-                // if using physical holes, move to side so it won't fall back down immediately
-                transform.position = new Vector3(transform.position.x, HoleManager.Instance.floorMapping[currentFloor + 1], transform.position.z);
+                // move to side so it won't fall back down immediately
+                transform.position = new Vector3(transform.position.x, transform.position.y + 15, transform.position.z);
                 currentFloor++;
                 BoostSuccessful(gameObject, _target);
                 state = EnemyState.Roaming;
@@ -460,13 +466,13 @@ public class Enemy1Controller : MonoBehaviour {
         print("checking for wall");
         const int layerMask = 1 << 6;
 
-        if (Physics.Raycast(transform.position, transform.forward, out var hit, 20, layerMask)) {
+        if (Physics.Raycast(transform.position, transform.forward, out var hit, 25, layerMask)) {
             Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.yellow);
             Debug.Log("Wall detected");
             return true;
         }
 
-        Debug.DrawRay(transform.position, transform.forward * 20, Color.white);
+        Debug.DrawRay(transform.position, transform.forward * 50, Color.white);
         Debug.Log("No wall detected");
         
         return false;
