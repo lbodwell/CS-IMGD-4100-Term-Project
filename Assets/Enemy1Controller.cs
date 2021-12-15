@@ -52,7 +52,6 @@ public class Enemy1Controller : MonoBehaviour {
     public float pushRange = 25;
     public float holeDetectionRange = 100;
     public float communicationRange = 25;
-    public float intersectionRadius = 25;
     public int currentFloor = 5;
     public bool isNearHole;
 
