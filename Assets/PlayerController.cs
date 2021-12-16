@@ -16,16 +16,23 @@ public class PlayerController : MonoBehaviour {
     private float _turnSmoothingVel;
 
     private void Update() {
-        var shortestHoleDist = float.MaxValue;
+        var shortestDownwardHoleDist = float.MaxValue;
+        var shortestUpwardHoleDist = float.MaxValue;
         nearestDownwardHole = null;
         nearestUpwardHole = null;
+        
         foreach (var hole in HoleManager.Instance.holes) {
-            var holeCollider = hole.GetComponent<HoleCollider>();
+            var holeCollider = hole.GetComponent<Hole>();
             var holePos = holeCollider.transform.position;
             var holeDist = Vector3.Distance(holePos, transform.position);
-            if (holeDist < shortestHoleDist && hole.GetComponent<HoleCollider>().floorNumber == currentFloor) {
-                shortestHoleDist = holeDist;
+            if (holeDist < shortestDownwardHoleDist && hole.GetComponent<Hole>().floorNumber == currentFloor) {
+                shortestDownwardHoleDist = holeDist;
                 nearestDownwardHole = hole;
+            }
+
+            if (holeDist < shortestUpwardHoleDist && hole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
+                shortestUpwardHoleDist = holeDist;
+                nearestUpwardHole = hole;
             }
         }
         
@@ -34,11 +41,27 @@ public class PlayerController : MonoBehaviour {
         var inputDirection = new Vector3(horizInput, 0f, vertInput).normalized;
 
         if (Input.GetKeyDown(KeyCode.Space) && controller.isGrounded) {
-            if (Vector3.Distance(transform.position, nearestUpwardHole.transform.position) < 10) {
-                
-            }
             velocity.y = 12f;
             isJumping = true;
+            
+            if (nearestUpwardHole != null) {
+                if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
+                    Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 && 
+                    currentFloor == nearestUpwardHole.GetComponent<Hole>().floorNumber - 1) {
+                    Debug.Log("here");
+                    currentFloor++;
+                    transform.position = new Vector3(transform.position.x, transform.position.y + 10, transform.position.z);
+                }
+            }
+        }
+        
+        if (nearestDownwardHole != null) {
+            if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
+                Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
+                currentFloor == nearestDownwardHole.GetComponent<Hole>().floorNumber && controller.isGrounded) {
+                currentFloor--;
+                transform.position = new Vector3(transform.position.x, transform.position.y - 5, transform.position.z);
+            }
         }
 
         velocity.x = movementSpeed;
