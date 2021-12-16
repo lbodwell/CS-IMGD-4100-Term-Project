@@ -347,6 +347,7 @@ public class EnemyController : MonoBehaviour {
                     if (!_recentRejections.Contains(allyObj)) {
                         var allyDist = Vector3.Distance(transform.position, allyObj.transform.position);
                         if (allyDist < shortestDist && allyObj.GetComponent<EnemyController>().currentFloor == currentFloor) {
+                            Debug.Log("Ally on floor.");
                             shortestDist = allyDist;
                             closestAlly = allyObj;
                         }
