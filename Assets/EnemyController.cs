@@ -76,7 +76,6 @@ public class EnemyController : MonoBehaviour {
         EventManager.Instance.OnCommsInitiated += OnCommsInitiated;
         EventManager.Instance.OnBoostSuccessful += OnBoostSuccessful;
         EventManager.Instance.OnPush += OnPush;
-        EventManager.Instance.OnEcho += OnEcho;
     }
 
     private void OnDestroy() {
@@ -84,7 +83,6 @@ public class EnemyController : MonoBehaviour {
         EventManager.Instance.OnCommsInitiated -= OnCommsInitiated;
         EventManager.Instance.OnBoostSuccessful -= OnBoostSuccessful;
         EventManager.Instance.OnPush -= OnPush;
-        EventManager.Instance.OnEcho -= OnEcho;
     }
 
     private void Update() {
@@ -515,8 +513,11 @@ public class EnemyController : MonoBehaviour {
             if (allyObj.GetInstanceID() != GetInstanceID()) {
                 var allyPos = allyObj.transform.position;
                 var allyDist = Vector3.Distance(allyPos, transform.position);
+                Vector3 allyDir = allyObj.transform.position - transform.position;
+                Vector3 forward = transform.forward;
+                float angle = Vector3.SignedAngle(allyDir, forward, Vector3.up);
                 
-                if (allyDist < pushRange && allyObj.GetComponent<EnemyController>().currentFloor == currentFloor) {
+                if (allyDist < pushRange && allyObj.GetComponent<EnemyController>().currentFloor == currentFloor && angle > -5.0f && angle < 5.0f) {
                     enemyCount++;
                 }
             }
@@ -563,9 +564,5 @@ public class EnemyController : MonoBehaviour {
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
             _isBeingPushed = true;
         }
-    }
-
-    private void OnEcho(string message) {
-        Debug.Log(message);
     }
 }
