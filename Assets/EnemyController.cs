@@ -378,14 +378,19 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.ReturnToHoleBoosting: {
-                var nearestUpwardHolePos = nearestUpwardHole.transform.position;
-                agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
+                if (nearestUpwardHole != null) {
+                    var nearestUpwardHolePos = nearestUpwardHole.transform.position;
+                    agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
 
-                if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
-                    Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
-                    nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
-                    Debug.Log("State of enemy is changing from ReturnToHoleBoosting to Boosting.");
-                    state = EnemyState.Boosting;
+                    if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
+                        Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
+                        nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
+                        Debug.Log("State of enemy is changing from ReturnToHoleBoosting to Boosting.");
+                        state = EnemyState.Boosting;
+                    }
+                } else {
+                    Debug.Log("State of enemy is changing from ReturnToHoleBoosting to Roaming.");
+                    state = EnemyState.Roaming;
                 }
                 
                 break;
@@ -404,18 +409,23 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.ReturnToHoleBeingBoosted: {
-                var nearestUpwardHolePos = nearestUpwardHole.transform.position;
-                agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
+                if (nearestUpwardHole != null) {
+                    var nearestUpwardHolePos = nearestUpwardHole.transform.position;
+                    agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
 
-                if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
-                    Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
-                    nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
-                    Debug.Log("State of enemy is changing from ReturnToHoleBeingBoosted to BeingBoosted.");
-                    state = EnemyState.BeingBoosted;
-                    boostStatus = BoostStatus.Undefined;
-                    allyBoostStatus = BoostStatus.Undefined;
+                    if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
+                        Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
+                        nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
+                        Debug.Log("State of enemy is changing from ReturnToHoleBeingBoosted to BeingBoosted.");
+                        state = EnemyState.BeingBoosted;
+                        boostStatus = BoostStatus.Undefined;
+                        allyBoostStatus = BoostStatus.Undefined;
+                    }
+                } else {
+                    Debug.Log("State of enemy is changing from ReturnToHoleBeingBoosted to Roaming.");
+                    state = EnemyState.Roaming;
                 }
-                
+
                 break;
             }
 
