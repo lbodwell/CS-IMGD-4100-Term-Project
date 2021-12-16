@@ -293,19 +293,17 @@ public class EnemyController : MonoBehaviour {
                     Debug.Log("State of enemy is changing from Chasing to JumpingDown.");
                     state = EnemyState.JumpingDown;
                 } else if (!(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor)) {
-                    state = EnemyState.Roaming;
-                } else if (Vector3.Distance(transform.position, _target.transform.position) < 5) {
-                    print("Game over!");
                     Debug.Log("State of enemy is changing from Chasing to Roaming.");
                     transform.rotation = Quaternion.Euler(new Vector3(0, 0, 0));
                     if (!IsWallInFront()) {
                         state = EnemyState.Turning;
-                    }
-                    else {
+                    } else {
                         state = EnemyState.Roaming;
                     }
                 } else if (Vector3.Distance(transform.position, _target.transform.position) < 5) {
+                    // render game over text
                     print("Game over!");
+                    Time.timeScale = 0;
                 }
                 
                 break;
