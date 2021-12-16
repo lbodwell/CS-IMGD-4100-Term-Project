@@ -48,7 +48,6 @@ public class PlayerController : MonoBehaviour {
                 if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
                     Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 && 
                     currentFloor == nearestUpwardHole.GetComponent<Hole>().floorNumber - 1) {
-                    Debug.Log("here");
                     currentFloor++;
                     transform.position = new Vector3(transform.position.x, transform.position.y + 10, transform.position.z);
                 }

@@ -17,7 +17,6 @@ public class EnemyController : MonoBehaviour {
         SearchingAlly,
         CommsWithAllySelfInitiated,
         CommsWithAllyOtherInitiated,
-        CommsWithAllyManipulatorInitiated,
         Boosting,
         BeingBoosted,
         ReturnToHoleBoosting,
@@ -31,16 +30,6 @@ public class EnemyController : MonoBehaviour {
         Waiting,
         Undefined
     }
-    
-    public delegate void CommsResponse(GameObject sender, GameObject recipient, BoostStatus allyStatus);
-    public delegate void CommsInitiated(GameObject sender, GameObject recipient, double allyWillingness);
-    public delegate void BoostSuccess(GameObject sender, GameObject recipient);
-    public delegate void Push(GameObject sender, GameObject recipient);
-
-    public static event CommsResponse SendCommsResponse;
-    public static event CommsInitiated InitiateComms;
-    public static event BoostSuccess BoostSuccessful;
-    public static event Push PushAlly;
 
     public NavMeshAgent agent;
     public EnemyState state;
@@ -51,8 +40,8 @@ public class EnemyController : MonoBehaviour {
     public GameObject nearestUpwardHole;
     public float playerDetectionRange = 50;
     public float pushRange = 25;
+    public float communicationRange = 10;
     public float holeDetectionRange = 100;
-    public float communicationRange = 25;
     public int currentFloor = 3;
     public int enemyCheckCount = 3;
     public bool isNearHole;
@@ -64,7 +53,6 @@ public class EnemyController : MonoBehaviour {
     private bool _isAtIntersection;
     private bool _isBeingPushed;
     private bool _isReceivingComms;
-    private bool _isReceivingManipulatorComms;
     private bool _hasResponded;
     private bool _wasBoostSuccessful;
     private bool _isPushing;
@@ -82,22 +70,21 @@ public class EnemyController : MonoBehaviour {
         if (enemyType == Enemy.EnemyType.Type2) {
             playerDetectionRange = 75;
             pushRange = 15;
-            communicationRange = 15;
         }
+        
+        EventManager.Instance.OnCommsResponse += OnCommsResponse;
+        EventManager.Instance.OnCommsInitiated += OnCommsInitiated;
+        EventManager.Instance.OnBoostSuccessful += OnBoostSuccessful;
+        EventManager.Instance.OnPush += OnPush;
+        EventManager.Instance.OnEcho += OnEcho;
     }
-    
-    private void OnEnable() {
-        SendCommsResponse += OnCommsResponse;
-        InitiateComms += OnCommsInitiated;
-        BoostSuccessful += OnBoostSuccessful;
-        PushAlly += OnPush;
-    }
-    
-    private void OnDisable() {
-        SendCommsResponse -= OnCommsResponse;
-        InitiateComms -= OnCommsInitiated;
-        BoostSuccessful -= OnBoostSuccessful;
-        PushAlly -= OnPush;
+
+    private void OnDestroy() {
+        EventManager.Instance.OnCommsResponse -= OnCommsResponse;
+        EventManager.Instance.OnCommsInitiated -= OnCommsInitiated;
+        EventManager.Instance.OnBoostSuccessful -= OnBoostSuccessful;
+        EventManager.Instance.OnPush -= OnPush;
+        EventManager.Instance.OnEcho -= OnEcho;
     }
 
     private void Update() {
@@ -122,32 +109,27 @@ public class EnemyController : MonoBehaviour {
 
         switch (state) {
             case EnemyState.Roaming: {
-                // TODO: tune this
                 agent.SetDestination(transform.position + transform.forward);
-                agent.isStopped = false;
 
                 if (!_canPush) {
                     foreach (var ally in EnemyManager.Instance.enemies) {
                         var allyObj = ally.obj;
-                        var allyType = ally.type;
+                        var allyController = allyObj.GetComponent<EnemyController>();
                         
-                        if (allyObj.GetInstanceID() != GetInstanceID()) {
+                        if (allyObj.GetInstanceID() != GetInstanceID() && allyController.state == EnemyState.Roaming) {
                             var allyPos = allyObj.transform.position;
                             var allyDist = Vector3.Distance(allyPos, transform.position);
+                            
+                            if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
+                                var hole = allyController.nearestDownwardHole;
+                                if (allyController.isNearHole && hole != null) {
+                                    var allyDirection = Vector3.Angle(allyPos, transform.position);
+                                    var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
 
-                            if (allyType == Enemy.EnemyType.Type1) {
-                                var allyController = allyObj.GetComponent<EnemyController>();
-                                if (allyDist < pushRange && allyController.currentFloor == currentFloor) {
-                                    var hole = allyController.nearestDownwardHole;
-                                    if (allyController.isNearHole && hole != null) {
-                                        var allyDirection = Vector3.Angle(allyPos, transform.position);
-                                        var holeDirection = Vector3.Angle(hole.transform.position, allyPos);
-
-                                        if (Math.Abs(allyDirection - holeDirection) < 5) {
-                                            _canPush = true;
-                                            _target = allyObj;
-                                            break;
-                                        }
+                                    if (Math.Abs(allyDirection - holeDirection) < 5) {
+                                        _canPush = true;
+                                        _target = allyObj;
+                                        break;
                                     }
                                 }
                             }
@@ -156,25 +138,21 @@ public class EnemyController : MonoBehaviour {
                 }
 
                 if (_isBeingPushed) {
-                    //Debug.Log("State of enemy is changing from Roaming to BeingPushed.");
+                    Debug.Log("State of enemy is changing from Roaming to BeingPushed.");
                     state = EnemyState.BeingPushed;
                 } else if ((_isAtIntersection && _rand.NextDouble() > 0.5) || !IsWallInFront()) {
-                    ////Debug.Log("State of enemy is changing from Roaming to Turning.");
+                    //Debug.Log("State of enemy is changing from Roaming to Turning.");
                     state = EnemyState.Turning;
                 } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor) {
                      _target = _player;
-                     //Debug.Log("State of enemy is changing from Roaming to Chasing.");
-                    state = EnemyState.Chasing;
+                     Debug.Log("State of enemy is changing from Roaming to Chasing.");
+                     state = EnemyState.Chasing;
                 } else if (_isReceivingComms) {
                     _isReceivingComms = false;
-                    //Debug.Log("State of enemy is changing from Roaming to CommsWithAllyOtherInitiated.");
+                    Debug.Log("State of enemy is changing from Roaming to CommsWithAllyOtherInitiated.");
                     state = EnemyState.CommsWithAllyOtherInitiated;
-                } else if (_isReceivingManipulatorComms) {
-                    _isReceivingManipulatorComms = false;
-                    //Debug.Log("State of enemy is changing from Roaming to CommsWithAllyManipulatorInitiated.");
-                    state = EnemyState.CommsWithAllyManipulatorInitiated;
                 } else if (_canPush) {
-                    //Debug.Log("State of enemy is changing from Roaming to AbleToPush.");
+                    // Debug.Log("State of enemy is changing from Roaming to AbleToPush.");
                     state = EnemyState.AbleToPush;
                 }
 
@@ -202,7 +180,7 @@ public class EnemyController : MonoBehaviour {
                     _turnTimer = Time.time + (enemyType == Enemy.EnemyType.Type2 ? 3 : 1);
                 }
                 
-                // //Debug.Log("State of enemy is changing from Turning to Roaming.");
+                //Debug.Log("State of enemy is changing from Turning to Roaming.");
                 state = EnemyState.Roaming;
                 
                 break;
@@ -210,31 +188,25 @@ public class EnemyController : MonoBehaviour {
 
             case EnemyState.BeingPushed: {
                 if (nearestDownwardHole != null) {
-                    agent.SetDestination(nearestDownwardHole.transform.position);
-                    
-                    if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
-                        Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
-                        currentFloor == nearestDownwardHole.GetComponent<Hole>().floorNumber) {
-                        agent.Warp(new Vector3(transform.position.x, transform.position.y - 9, transform.position.z));
-                        currentFloor--;
-                        //Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
-                        state = EnemyState.Roaming;
-                    }
-                } else {
-                    //Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
-                    state = EnemyState.Roaming;
+                    var holePos = nearestDownwardHole.transform.position;
+                    agent.Warp(new Vector3(holePos.x, holePos.y - 9, holePos.z));
+                    currentFloor--;
+                    _isBeingPushed = false;
                 }
+
+                Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
+                state = EnemyState.Roaming;
 
                 break;
             }
 
             case EnemyState.AbleToPush: {
                 if (_rand.NextDouble() < (enemyType == Enemy.EnemyType.Type2 ? 0.25 : 0.5) && Time.time > _pushTimer) {
-                    //Debug.Log("State of enemy is changing from AbleToPush to Pushing.");
+                    Debug.Log("State of enemy is changing from AbleToPush to Pushing.");
                     state = EnemyState.Pushing;
                     _pushTimer = Time.time + (enemyType == Enemy.EnemyType.Type2 ? 5 : 3);
                 } else {
-                    //Debug.Log("State of enemy is changing from AbleToPush to Roaming.");
+                    // Debug.Log("State of enemy is changing from AbleToPush to Roaming.");
                     state = EnemyState.Roaming;
                     _pushTimer = Time.time + 1;
                 }
@@ -247,20 +219,17 @@ public class EnemyController : MonoBehaviour {
                     if (_target != null) {
                         agent.SetDestination(_target.transform.position);
                     } else {
-                        //Debug.Log("State of enemy is changing from Pushing to Roaming.");
+                        Debug.Log("State of enemy is changing from Pushing to Roaming.");
                         state = EnemyState.Roaming;
                     }
                     
-                    PushAlly(gameObject, _target);
-                    _isPushing = true;
-                }
-                
-                if (transform.position == agent.destination) {
+                    // Verify this works
+                    EventManager.Instance.PushAlly(_target);
                     _isPushing = false;
-                    //Debug.Log("State of enemy is changing from Pushing to Roaming.");
+                    Debug.Log("State of enemy is changing from Pushing to Roaming.");
                     state = EnemyState.Roaming;
                 }
-
+                
                 break;
             }
 
@@ -280,13 +249,13 @@ public class EnemyController : MonoBehaviour {
                         }
                     }
                     
-                    //Debug.Log("State of enemy is changing from Chasing to SearchingAlly.");
+                    Debug.Log("State of enemy is changing from Chasing to SearchingAlly.");
                     state = EnemyState.SearchingAlly;
                 } else if (playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor - 1) {
                     Debug.Log("State of enemy is changing from Chasing to JumpingDown.");
                     state = EnemyState.JumpingDown;
                 } else if (!(playerDist < playerDetectionRange && _player.GetComponent<PlayerController>().currentFloor == currentFloor)) {
-                    //Debug.Log("State of enemy is changing from Chasing to Roaming.");
+                    Debug.Log("State of enemy is changing from Chasing to Roaming.");
                     transform.rotation = Quaternion.Euler(new Vector3(0, 0, 0));
                     if (!IsWallInFront()) {
                         state = EnemyState.Turning;
@@ -295,8 +264,8 @@ public class EnemyController : MonoBehaviour {
                     }
                 } else if (Vector3.Distance(transform.position, _target.transform.position) < 5) {
                     // render game over text
-                    //Debug.Log("Game over!");
-                    Time.timeScale = 0;
+                    Debug.Log("Game over!");
+                    //Time.timeScale = 0;
                 }
                 
                 break;
@@ -315,7 +284,7 @@ public class EnemyController : MonoBehaviour {
                         state = EnemyState.Roaming;
                     }
                 } else {
-                    //Debug.Log("State of enemy is changing from JumpingDown to Roaming.");
+                    Debug.Log("State of enemy is changing from JumpingDown to Roaming.");
                     state = EnemyState.Roaming;
                 }
 
@@ -329,7 +298,7 @@ public class EnemyController : MonoBehaviour {
                 foreach (var ally in EnemyManager.Instance.enemies) {
                     var allyObj = ally.obj;
                     
-                    if (!_recentRejections.Contains(allyObj)) {
+                    if (allyObj.GetInstanceID() != gameObject.GetInstanceID() && !_recentRejections.Contains(allyObj)) {
                         var allyDist = Vector3.Distance(transform.position, allyObj.transform.position);
                         if (allyDist < shortestDist && allyObj.GetComponent<EnemyController>().currentFloor == currentFloor) {
                             shortestDist = allyDist;
@@ -340,11 +309,11 @@ public class EnemyController : MonoBehaviour {
 
                 if (closestAlly != null) {
                     _target = closestAlly;
-                    //Debug.Log("State of enemy is changing from SearchingAlly to ChasingAlly.");
+                    Debug.Log("State of enemy is changing from SearchingAlly to ChasingAlly.");
                     state = EnemyState.ChasingAlly;
                 } else {
                     nearestUpwardHole = null;
-                    //Debug.Log("State of enemy is changing from SearchingAlly to Roaming.");
+                    Debug.Log("State of enemy is changing from SearchingAlly to Roaming.");
                     state = EnemyState.Roaming;
                 }
                 
@@ -353,7 +322,7 @@ public class EnemyController : MonoBehaviour {
 
             case EnemyState.ChasingAlly: {
                 if (_isBeingPushed) {
-                    //Debug.Log("State of enemy is changing from ChasingAlly to BeingPushed.");
+                    Debug.Log("State of enemy is changing from ChasingAlly to BeingPushed.");
                     state = EnemyState.BeingPushed;
                 } else {
                     var allyPos = _target.transform.position;
@@ -361,7 +330,7 @@ public class EnemyController : MonoBehaviour {
                     
                     var allyDist = Vector3.Distance(allyPos, transform.position);
                     if (allyDist < communicationRange) {
-                        //Debug.Log("State of enemy is changing from ChasingAlly to CommsWithAllySelfInitiated.");
+                        Debug.Log("State of enemy is changing from ChasingAlly to CommsWithAllySelfInitiated.");
                         state = EnemyState.CommsWithAllySelfInitiated;
                     }
                 }
@@ -379,23 +348,31 @@ public class EnemyController : MonoBehaviour {
                         // 0.3-0.5
                         willingness = _rand.NextDouble() * 0.2 + 0.3;
                     }
-                    
-                    InitiateComms(gameObject, _target, willingness);
-                    boostStatus = BoostStatus.Waiting;
+
+                    var allyState = _target.GetComponent<EnemyController>().state;
+                    if (allyState == EnemyState.Roaming || allyState == EnemyState.ChasingAlly || allyState == EnemyState.SearchingAlly || allyState == EnemyState.Turning || allyState == EnemyState.AbleToPush) {
+                        EventManager.Instance.InitiateComms(gameObject, _target, nearestUpwardHole, willingness);
+                        boostStatus = BoostStatus.Waiting;
+                    } else {
+                        _recentRejections.Add(_target);
+                        state = EnemyState.SearchingAlly;
+                    }
                 } else if (allyBoostStatus == BoostStatus.Boosting) {
                     boostStatus = BoostStatus.BeingBoosted;
                     _recentRejections.Clear();
-                    //Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to ReturnToHoleBeingBoosted.");
+                    Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to ReturnToHoleBeingBoosted.");
                     state = EnemyState.ReturnToHoleBeingBoosted;
                 } else if (allyBoostStatus == BoostStatus.BeingBoosted) {
                     boostStatus = BoostStatus.Boosting;
                     _recentRejections.Clear();
-                    //Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to ReturnToHoleBoosting.");
+                    Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to ReturnToHoleBoosting.");
                     state = EnemyState.ReturnToHoleBoosting;
                 } else if (allyBoostStatus == BoostStatus.Rejection) {
-                    boostStatus = BoostStatus.Rejection;
+                    boostStatus = BoostStatus.Undefined;
+                    allyBoostStatus = BoostStatus.Undefined;
                     _recentRejections.Add(_target);
-                    //Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to Roaming.");
+                    Debug.Log("Rejection!");
+                    Debug.Log("State of enemy is changing from CommsWithAllySelfInitiated to Roaming.");
                     state = EnemyState.Roaming;
                 }
                 
@@ -403,12 +380,13 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.ReturnToHoleBoosting: {
-                agent.SetDestination(nearestUpwardHole.transform.position);
-                
+                var nearestUpwardHolePos = nearestUpwardHole.transform.position;
+                agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
+
                 if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
                     Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
                     nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
-                    //Debug.Log("State of enemy is changing from ReturnToHoleBoosting to Boosting.");
+                    Debug.Log("State of enemy is changing from ReturnToHoleBoosting to Boosting.");
                     state = EnemyState.Boosting;
                 }
                 
@@ -420,7 +398,7 @@ public class EnemyController : MonoBehaviour {
                     _wasBoostSuccessful = false;
                     boostStatus = BoostStatus.Undefined;
                     allyBoostStatus = BoostStatus.Undefined;
-                    //Debug.Log("State of enemy is changing from Boosting to Roaming.");
+                    Debug.Log("State of enemy is changing from Boosting to Roaming.");
                     state = EnemyState.Roaming;
                 }
                 
@@ -428,13 +406,16 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.ReturnToHoleBeingBoosted: {
-                agent.SetDestination(nearestUpwardHole.transform.position);
-                
+                var nearestUpwardHolePos = nearestUpwardHole.transform.position;
+                agent.SetDestination(new Vector3(nearestUpwardHolePos.x, transform.position.y, nearestUpwardHolePos.z));
+
                 if (Math.Abs(transform.position.x - nearestUpwardHole.transform.position.x) < 5 && 
                     Math.Abs(transform.position.z - nearestUpwardHole.transform.position.z) < 5 &&
                     nearestUpwardHole.GetComponent<Hole>().floorNumber == currentFloor + 1) {
-                    //Debug.Log("State of enemy is changing from ReturnToHoleBeingBoosted to BeingBoosted.");
+                    Debug.Log("State of enemy is changing from ReturnToHoleBeingBoosted to BeingBoosted.");
                     state = EnemyState.BeingBoosted;
+                    boostStatus = BoostStatus.Undefined;
+                    allyBoostStatus = BoostStatus.Undefined;
                 }
                 
                 break;
@@ -443,8 +424,8 @@ public class EnemyController : MonoBehaviour {
             case EnemyState.BeingBoosted: {
                 agent.Warp(new Vector3(transform.position.x, transform.position.y + 9, transform.position.z));
                 currentFloor++;
-                BoostSuccessful(gameObject, _target);
-                //Debug.Log("State of enemy is changing from BeingBoosted to Roaming.");
+                EventManager.Instance.ReportBoostSuccess(_target);
+                Debug.Log("State of enemy is changing from BeingBoosted to Roaming.");
                 state = EnemyState.Roaming;
                 
                 break;
@@ -468,21 +449,22 @@ public class EnemyController : MonoBehaviour {
                         boostStatus = BoostStatus.BeingBoosted;
                     } else {
                         boostStatus = BoostStatus.Rejection;
+                        nearestUpwardHole = null;
                     }
                     
-                    SendCommsResponse(gameObject, _target, boostStatus);
+                    EventManager.Instance.SendCommsResponse(gameObject, _target, boostStatus);
                     _hasResponded = true;
                     
                     switch (boostStatus) {
                         case BoostStatus.Boosting: {
-                            //Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to ReturnToHoleBoosting.");
+                            Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to ReturnToHoleBoosting.");
                             state = EnemyState.ReturnToHoleBoosting;
                         
                             break;
                         }
                     
                         case BoostStatus.BeingBoosted: {
-                            //Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to ReturnToHoleBeingBoosted.");
+                            Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to ReturnToHoleBeingBoosted.");
                             state = EnemyState.ReturnToHoleBeingBoosted;
                         
                             break;
@@ -490,7 +472,7 @@ public class EnemyController : MonoBehaviour {
                     
                         default: {
                             boostStatus = BoostStatus.Undefined;
-                            //Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to Roaming.");
+                            Debug.Log("State of enemy is changing from CommsWithAllyOtherInitiated to Roaming.");
                             state = EnemyState.Roaming;
                         
                             break;
@@ -501,35 +483,6 @@ public class EnemyController : MonoBehaviour {
                 break;
             }
 
-            case EnemyState.CommsWithAllyManipulatorInitiated: {
-                if (!_hasResponded) {
-                    double willingness;
-                    if (enemyType == Enemy.EnemyType.Type2) {
-                        // 0.5-0.8
-                        willingness = _rand.NextDouble() * 0.3 + 0.5;
-                    } else {
-                        // 0.3-0.5
-                        willingness = _rand.NextDouble() * 0.2 + 0.3;
-                    }
-                    
-                    boostStatus = willingness > _rand.NextDouble() ? BoostStatus.Boosting : BoostStatus.Rejection;
-                    
-                    SendCommsResponse(gameObject, _target, boostStatus);
-                    _hasResponded = true;
-
-                    if (boostStatus == BoostStatus.Boosting) {
-                        //Debug.Log("State of enemy is changing from CommsWithAllyManipulatorInitiated to ReturnToHoleBoosting.");
-                        state = EnemyState.ReturnToHoleBoosting;
-                    } else {
-                        boostStatus = BoostStatus.Undefined;
-                        //Debug.Log("State of enemy is changing from CommsWithAllyManipulatorInitiated to Roaming.");
-                        state = EnemyState.Roaming;
-                    }
-                }
-
-                break;
-            }
-            
             default: {
                 //Debug.Log("State of enemy is changing from Default to Roaming.");
                 state = EnemyState.Roaming;
@@ -549,7 +502,7 @@ public class EnemyController : MonoBehaviour {
         }
 
         Debug.DrawRay(transform.position, transform.forward * 50, Color.yellow);
-        ////Debug.Log("No wall detected");
+        //Debug.Log("No wall detected");
         
         return false;
     }
@@ -575,7 +528,6 @@ public class EnemyController : MonoBehaviour {
     private void OnTriggerEnter(Collider other) {
         if (other.CompareTag("Intersection")) {
             _isAtIntersection = true;
-            //Debug.Log("At intersection");
         }
     }
 
@@ -587,33 +539,33 @@ public class EnemyController : MonoBehaviour {
 
     private void OnCommsResponse(GameObject sender, GameObject recipient, BoostStatus allyStatus) {
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
+            _target = sender;
             allyBoostStatus = allyStatus;
         }
     }
     
-    private void OnCommsInitiated(GameObject sender, GameObject recipient, double allyWillingness) {
+    private void OnCommsInitiated(GameObject sender, GameObject recipient, GameObject targetHole, double allyWillingness) {
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
             _allyWillingnessToBoost = allyWillingness;
+            _target = sender;
+            nearestUpwardHole = targetHole;
             _isReceivingComms = true;
         }
     }
-    
-    private void OnCommsInitiatedByManipulator(GameObject sender, GameObject recipient, double allyWillingness) {
-        if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
-            _allyWillingnessToBoost = allyWillingness;
-            _isReceivingManipulatorComms = true;
-        }
-    }
-    
-    private void OnBoostSuccessful(GameObject sender, GameObject recipient) {
+
+    private void OnBoostSuccessful(GameObject recipient) {
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
             _wasBoostSuccessful = true;
         }
     }
 
-    private void OnPush(GameObject sender, GameObject recipient) {
+    private void OnPush(GameObject recipient) {
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
             _isBeingPushed = true;
         }
+    }
+
+    private void OnEcho(string message) {
+        Debug.Log(message);
     }
 }
