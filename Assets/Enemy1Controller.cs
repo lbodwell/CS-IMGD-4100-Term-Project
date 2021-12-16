@@ -170,22 +170,35 @@ public class Enemy1Controller : MonoBehaviour {
             
             case EnemyState.Turning: {
                 if (Time.time > _turnTimer) {
+                    Debug.Log("Time to turn.");
                     if (_rand.Next(0, 2) == 0) {
-                        //transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 90, transform.rotation.z));
-                        transform.Rotate(0, 90, 0);
+                        transform.rotation = Quaternion.Euler(new Vector3(0, transform.rotation.y + 90, 0));
+                        Debug.Log(transform.localRotation.eulerAngles.y);
+                        //transform.Rotate(new Vector3 (0, 90, 0));
+                        Debug.Log(transform.localRotation.eulerAngles.y);
+                        //transform.rotation *= Quaternion.Euler(0, 90*Time.deltaTime, 0);
                         if (IsWallInFront() != 0) {
-                            //transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
-                            transform.Rotate(0, 180, 0);
+                            transform.rotation = Quaternion.Euler(new Vector3(0, transform.rotation.y + 180, 0));
+                            Debug.Log(transform.localRotation.eulerAngles.y);
+                            //transform.Rotate(new Vector3 (0, 180, 0));
+                            Debug.Log(transform.localRotation.eulerAngles.y);
+                            //transform.rotation *= Quaternion.Euler(0, 180*Time.deltaTime, 0);
                         }
                     } else {
-                        //transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y - 90, transform.rotation.z));
-                        transform.Rotate(0, -90, 0);
+                        transform.rotation = Quaternion.Euler(new Vector3(0, transform.rotation.y - 90, 0));
+                        Debug.Log(transform.localRotation.eulerAngles.y);
+                        //transform.Rotate(new Vector3 (0, -90, 0));
+                        Debug.Log(transform.localRotation.eulerAngles.y);
+                        //transform.rotation *= Quaternion.Euler(0, -90*Time.deltaTime, 0);
                         if (IsWallInFront() != 0) {
-                            //transform.rotation = Quaternion.Euler(new Vector3(transform.rotation.x, transform.rotation.y + 180, transform.rotation.z));
-                            transform.Rotate(0, 190, 0);
+                            transform.rotation = Quaternion.Euler(new Vector3(0, transform.rotation.y + 180, 0));
+                            Debug.Log(transform.localRotation.eulerAngles.y);
+                            //transform.Rotate(new Vector3 (0, 180, 0));
+                            Debug.Log(transform.localRotation.eulerAngles.y);
+                            //transform.rotation *= Quaternion.Euler(0, 180*Time.deltaTime, 0);
                         }
                     }
-                    _turnTimer = Time.time + 1;
+                    _turnTimer = Time.time + 5;
                 }
                 
                // Debug.Log("State of enemy is changing from Turning to Roaming.");
@@ -511,7 +524,7 @@ public class Enemy1Controller : MonoBehaviour {
         const int layerMask = 1 << 6;
 
         if (Physics.Raycast(transform.position, transform.forward, out var hit, 5, layerMask)) {
-            Debug.Log("Wall detected");
+            //Debug.Log("Wall detected");
             return hit.distance;
         }
         //Debug.Log("No wall detected");
