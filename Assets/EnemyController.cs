@@ -44,15 +44,15 @@ public class EnemyController : MonoBehaviour {
 
     public NavMeshAgent agent;
     public EnemyState state;
-    public BoostStatus boostStatus;
-    public BoostStatus allyBoostStatus;
+    public BoostStatus boostStatus = BoostStatus.Undefined;
+    public BoostStatus allyBoostStatus = BoostStatus.Undefined;
     public Enemy.EnemyType enemyType;
     public GameObject nearestDownwardHole;
     public GameObject nearestUpwardHole;
     public float playerDetectionRange = 50;
     public float pushRange = 25;
     public float holeDetectionRange = 100;
-    public float communicationRange = 25;
+    public float communicationRange = 5;
     public int currentFloor = 3;
     public int enemyCheckCount = 3;
     public bool isNearHole;
@@ -63,7 +63,7 @@ public class EnemyController : MonoBehaviour {
     private Random _rand;
     private bool _isAtIntersection;
     private bool _isBeingPushed;
-    private bool _isReceivingComms;
+    public bool _isReceivingComms;
     private bool _isReceivingManipulatorComms;
     private bool _hasResponded;
     private bool _wasBoostSuccessful;
@@ -154,6 +154,9 @@ public class EnemyController : MonoBehaviour {
                     }
                 }
 
+                if(_isReceivingComms) {
+                    Debug.Log(_isReceivingComms);
+                }
                 if (_isBeingPushed) {
                     Debug.Log("State of enemy is changing from Roaming to BeingPushed.");
                     state = EnemyState.BeingPushed;
@@ -165,15 +168,15 @@ public class EnemyController : MonoBehaviour {
                      Debug.Log("State of enemy is changing from Roaming to Chasing.");
                     state = EnemyState.Chasing;
                 } else if (_isReceivingComms) {
-                    _isReceivingComms = false;
                     Debug.Log("State of enemy is changing from Roaming to CommsWithAllyOtherInitiated.");
+                    _isReceivingComms = false;
                     state = EnemyState.CommsWithAllyOtherInitiated;
                 } else if (_isReceivingManipulatorComms) {
                     _isReceivingManipulatorComms = false;
                     Debug.Log("State of enemy is changing from Roaming to CommsWithAllyManipulatorInitiated.");
                     state = EnemyState.CommsWithAllyManipulatorInitiated;
                 } else if (_canPush) {
-                    Debug.Log("State of enemy is changing from Roaming to AbleToPush.");
+                    //Debug.Log("State of enemy is changing from Roaming to AbleToPush.");
                     state = EnemyState.AbleToPush;
                 }
 
@@ -217,20 +220,25 @@ public class EnemyController : MonoBehaviour {
 
             case EnemyState.BeingPushed: {
                 if (nearestDownwardHole != null) {
-                    agent.SetDestination(nearestDownwardHole.transform.position);
+                    // agent.SetDestination(nearestDownwardHole.transform.position);
                     
-                    if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
-                        Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
-                        currentFloor == nearestDownwardHole.GetComponent<Hole>().floorNumber) {
-                        transform.position = new Vector3(transform.position.x, transform.position.y - 9, transform.position.z);
-                        currentFloor--;
-                        Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
-                        state = EnemyState.Roaming;
-                    }
-                } else {
-                    Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
-                    state = EnemyState.Roaming;
+                    // if (Math.Abs(transform.position.x - nearestDownwardHole.transform.position.x) < 5 && 
+                    //     Math.Abs(transform.position.z - nearestDownwardHole.transform.position.z) < 5 && 
+                    //     currentFloor == nearestDownwardHole.GetComponent<Hole>().floorNumber) {
+                    //         Debug.Log("In the if.");
+                    //     transform.position = new Vector3(transform.position.x, transform.position.y - 9, transform.position.z);
+                    //     currentFloor--;
+                    //     Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
+                    //     state = EnemyState.Roaming;
+                    // }
+                    agent.Warp(new Vector3(nearestDownwardHole.transform.position.x, 
+                    nearestDownwardHole.transform.position.y - 9, 
+                    nearestDownwardHole.transform.position.z));
+                    currentFloor--;
                 }
+                Debug.Log("State of enemy is changing from BeingPushed to Roaming.");
+                state = EnemyState.Roaming;
+                _isBeingPushed = false;
 
                 break;
             }
@@ -241,9 +249,9 @@ public class EnemyController : MonoBehaviour {
                     state = EnemyState.Pushing;
                     _pushTimer = Time.time + (enemyType == Enemy.EnemyType.Type2 ? 5 : 3);
                 } else {
-                    Debug.Log("State of enemy is changing from AbleToPush to Roaming.");
+                    //Debug.Log("State of enemy is changing from AbleToPush to Roaming.");
                     state = EnemyState.Roaming;
-                    _pushTimer = Time.time + 1;
+                    //_pushTimer = Time.time + 1;
                 }
 
                 break;
@@ -377,6 +385,9 @@ public class EnemyController : MonoBehaviour {
             }
 
             case EnemyState.CommsWithAllySelfInitiated: {
+                if(allyBoostStatus != BoostStatus.Undefined) {
+                    Debug.Log(allyBoostStatus);
+                }
                 if (boostStatus == BoostStatus.Undefined) {
                     double willingness;
                     if (enemyType == Enemy.EnemyType.Type2) {
@@ -386,8 +397,10 @@ public class EnemyController : MonoBehaviour {
                         // 0.3-0.5
                         willingness = _rand.NextDouble() * 0.2 + 0.3;
                     }
-                    
+
+                    Debug.Log("Trying to send event.");
                     InitiateComms(gameObject, _target, willingness);
+                    Debug.Log("Event sent.");
                     boostStatus = BoostStatus.Waiting;
                 } else if (allyBoostStatus == BoostStatus.Boosting) {
                     boostStatus = BoostStatus.BeingBoosted;
@@ -470,6 +483,7 @@ public class EnemyController : MonoBehaviour {
                     }
                     
                     if (willingness > _rand.NextDouble()) {
+                        Debug.Log("Here");
                         boostStatus = BoostStatus.Boosting;
                     } else if (_allyWillingnessToBoost > _rand.NextDouble()) {
                         boostStatus = BoostStatus.BeingBoosted;
@@ -551,7 +565,7 @@ public class EnemyController : MonoBehaviour {
 
         if (Physics.Raycast(transform.position, transform.forward, out var hit, 5, layerMask)) {
             Debug.DrawRay(transform.position, transform.forward * hit.distance, Color.red);
-            Debug.Log("Wall detected");
+            //Debug.Log("Wall detected");
             return true;
         }
 
@@ -593,15 +607,28 @@ public class EnemyController : MonoBehaviour {
     }
 
     public void OnCommsResponse(GameObject sender, GameObject recipient, BoostStatus allyStatus) {
+        Debug.Log("OnCommsResponse Handle Occur");
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
-            allyBoostStatus = allyStatus;
+            Debug.Log("Ally status is:" + allyStatus);
+            allyBoostStatusChanger(allyStatus);
+            //this.allyBoostStatus = allyStatus;
+            Debug.Log(allyBoostStatus);
         }
+    }
+
+    private void allyBoostStatusChanger(BoostStatus allyStatus) {
+        Debug.Log("Get to method");
+        allyBoostStatus = allyStatus;
     }
     
     public void OnCommsInitiated(GameObject sender, GameObject recipient, double allyWillingness) {
+        Debug.Log("OnCommsInitiated Handle Occur");
         if (gameObject.GetInstanceID() == recipient.gameObject.GetInstanceID()) {
+            Debug.Log("Comms Received.");
             _allyWillingnessToBoost = allyWillingness;
             _isReceivingComms = true;
+            Debug.Log(_isReceivingComms);
+            state = EnemyState.CommsWithAllyOtherInitiated;
         }
     }
     
